@@ -1,0 +1,6 @@
+customer_id,first_name,last_name,email,signup_date,country
+1001,Ava,Mensah,ava.mensah@example.com,2025-01-14,Ghana
+1002,Kwame,Boateng,kwame.boateng@example.com,2025-02-03,Ghana
+1003,Chioma,Okafor,chioma.okafor@example.com,2025-02-19,Nigeria
+1004,Liam,Johnson,liam.johnson@example.com,2025-03-05,United States
+1005,Amara,Diallo,amara.diallo@example.com,2025-03-22,Senegal
