@@ -2,6 +2,8 @@
 
 Terraform implementation of the lab described in [`S3 Data Lake Foundation.md`](./S3%20Data%20Lake%20Foundation.md), deployed via a GitHub Actions CI/CD pipeline.
 
+Deployed and verified against the account on 2026-07-22 — see [`Lab_1_3_DataLake_Documentation.txt`](./Lab_1_3_DataLake_Documentation.txt) for the actual resource ARNs/names, deployment history, and verification results.
+
 ## What gets built
 
 | Lab part | Resource(s) |

@@ -1,0 +1,198 @@
+========================================
+ Lab 1.3 — S3 Data Lake Foundation
+ Data Platform Infrastructure
+ Region: eu-west-1
+ Account ID: 825765383386
+ Date: 2026-07-22
+ Deployed via: Terraform (GitHub Actions CI/CD)
+========================================
+
+DEVIATIONS FROM LAB DOC (read this first)
+------------------------------------------
+- Region: doc says us-east-1; this account's actual infrastructure
+  (data-platform-vpc from Lab 1.2, the DataSync lab) lives in eu-west-1,
+  so this stack targets eu-west-1 instead.
+- State backend: rather than standing up a dedicated bucket, this
+  stack's Terraform state reuses the shared data-lake-825765383386
+  bucket + datasync-terraform-locks DynamoDB table already created by
+  the DataSync lab (Lab 2.2), under key
+  terraform/s3-data-lake-foundation.tfstate.
+- CI/CD auth: static AWS credentials (AWS_ACCESS_KEY_ID/SECRET/
+  SESSION_TOKEN as GitHub secrets), matching every other lab's pipeline
+  in this account, rather than an OIDC-federated role. An OIDC bootstrap
+  (IAM role + identity provider) was built first, then dropped — nothing
+  else in this account relies on OIDC and it added setup steps this
+  training sandbox didn't need.
+- Security scanning: a Checkov CI gate was added temporarily to find
+  real gaps against the initial build — CloudTrail had no SNS or
+  CloudWatch Logs integration, no bucket in the stack had a lifecycle
+  rule aborting incomplete multipart uploads, and the CloudTrail bucket
+  itself wasn't access-logged. All of those were fixed. The gate itself
+  was then removed (never part of the lab's scope), but the fixes it
+  prompted were kept.
+- IAM roles: DataEngineerRole, GlueServiceRole, RedshiftIAMRole are
+  treated as pre-existing prerequisites from Lab 1.1 (iam-lab-terraform)
+  — looked up via Terraform data sources, not created here. Confirmed to
+  actually exist by reading that project's own deployed state file.
+- CloudTrail governance beyond the lab doc: SNS notification on new log
+  file delivery, real-time CloudWatch Logs integration, access logging
+  on the CloudTrail bucket itself, lifecycle rules on the CloudTrail and
+  logs buckets, and bucket-wide incomplete-multipart-upload cleanup.
+  None of this is in the original lab doc; added as governance
+  hardening at zero/near-zero additional cost.
+- KMS encryption deliberately NOT used (SSE-S3 everywhere instead), to
+  avoid the flat ~$1/month KMS CMK charge — a direct call made given
+  this account's history of surprise billing.
+
+RESOURCES CREATED
+------------------
+S3 Buckets:
+
+  Data lake:          data-lake-prod-825765383386
+    Versioning:       Enabled
+    Encryption:       AES256 (SSE-S3), bucket key enabled
+    Public Access:    Fully blocked
+    Access logging:   -> data-lake-prod-logs-825765383386
+                       (prefix s3-access-logs/)
+    Folders:          raw/, processed/, curated/, temp/, archive/
+    Test data:        raw/test_customers.csv (371 B)
+    Lifecycle rules:  processed-data-lifecycle
+                         (Glacier @90d, Deep Archive @180d)
+                       temp-data-expiration (delete @1d)
+                       archive-data-lifecycle
+                         (Deep Archive @30d, delete @2555d / 7y)
+                       abort-incomplete-multipart-uploads
+                         (bucket-wide, @7d)
+    Bucket policy:    Deny non-HTTPS, deny unencrypted PutObject,
+                      allow DataEngineerRole / GlueServiceRole /
+                      RedshiftIAMRole
+
+  Access logs:        data-lake-prod-logs-825765383386
+    Versioning:       Enabled
+    Encryption:       AES256 (SSE-S3)
+    Public Access:    Fully blocked
+    Lifecycle:        Glacier @90d, delete @365d,
+                      abort-incomplete-multipart @7d
+    Receives logs from both the data lake bucket and the CloudTrail
+    bucket (distinct prefixes)
+
+  CloudTrail storage: data-lake-prod-cloudtrail-825765383386
+    Versioning:       Enabled
+    Encryption:       AES256 (SSE-S3)
+    Public Access:    Fully blocked
+    Access logging:   -> data-lake-prod-logs-825765383386
+                       (prefix cloudtrail-access-logs/)
+    Lifecycle:        Glacier @90d (no expiration — audit logs are
+                      retained indefinitely, only re-tiered),
+                      abort-incomplete-multipart @7d
+
+CloudTrail:
+  Trail name:         data-lake-audit-trail
+  ARN:                arn:aws:cloudtrail:eu-west-1:825765383386:trail/data-lake-audit-trail
+  Multi-region:       Yes
+  Log file validation: Enabled
+  Event selector:     All (management events + S3 data events scoped to
+                      data-lake-prod-825765383386/)
+  S3 destination:     data-lake-prod-cloudtrail-825765383386
+  SNS topic:          data-lake-cloudtrail-notifications
+    ARN:              arn:aws:sns:eu-west-1:825765383386:data-lake-cloudtrail-notifications
+    Publishes on:     New CloudTrail log file delivered (CloudTrail
+                      service directly, plus an S3 event notification
+                      on the CloudTrail bucket itself)
+  CloudWatch Logs:    /aws/cloudtrail/data-lake-audit-trail
+    Retention:        365 days
+    IAM role:         CloudTrailCloudWatchLogsRole
+                      (trusts cloudtrail.amazonaws.com)
+  Status (verified 2026-07-22): IsLogging=true, actively delivering to
+    S3 + SNS + CloudWatch Logs (all three delivery timestamps within
+    minutes of the check)
+
+IAM (pre-existing, from Lab 1.1 — NOT created by this stack):
+  DataEngineerRole:   arn:aws:iam::825765383386:role/DataEngineerRole
+  GlueServiceRole:    arn:aws:iam::825765383386:role/GlueServiceRole
+  RedshiftIAMRole:    arn:aws:iam::825765383386:role/RedshiftIAMRole
+
+Tags applied to all resources:
+  Environment: Production
+  Owner:       DataEngineering
+  Purpose:     DataLake
+  CostCenter:  Analytics
+
+CI/CD PIPELINE
+---------------
+Repo:      github.com/Odile-nza/S3-Data-Lake-Foundation
+Workflow:  .github/workflows/terraform.yml
+Jobs:      plan (fmt check, validate, plan; PR comment) ->
+           apply (production environment gate, applies saved plan)
+Auth:      Static AWS credentials (AWS_ACCESS_KEY_ID / SECRET /
+           SESSION_TOKEN secrets) — this account vends short-lived STS
+           tokens, so these must be refreshed manually before each run
+State:     S3 backend, bucket data-lake-825765383386,
+           key terraform/s3-data-lake-foundation.tfstate,
+           DynamoDB lock table datasync-terraform-locks
+           (both shared with the DataSync lab, Lab 2.2)
+
+DEPLOYMENT HISTORY
+-------------------
+Run 1 (2026-07-22 10:59, 27s):   FAILED — Checkov security-scan gate,
+  10 findings (KMS encryption, SNS topic, CloudWatch Logs integration,
+  event notifications, cross-region replication, lifecycle rules,
+  access logging, abort-incomplete-multipart-upload).
+Run 2 (2026-07-22 12:26, 2m9s):  FAILED — AccessDenied on S3 PutObject.
+  The bucket policy denies PutObject unless the request explicitly
+  carries x-amz-server-side-encryption: AES256; the folder-placeholder
+  and test-data aws_s3_object resources didn't set that argument, so
+  Terraform never sent the header.
+Run 3 (2026-07-22, plan 25s + apply 20s = 51s total): SUCCESS.
+  Fix: added server_side_encryption = "AES256" to both aws_s3_object
+  resources (s3_folders.tf, test_data.tf).
+
+VERIFICATION (via AWS CLI, 2026-07-22, post-deploy)
+-----------------------------------------------------
+- All 4 buckets in the account confirmed to exist (3 created by this
+  stack + the 1 shared state bucket from the DataSync lab).
+- data-lake-prod-825765383386: versioning Enabled, encryption AES256,
+  public access fully blocked, all 5 folders + test_customers.csv
+  (371 B) present, lifecycle has all 4 rules exactly as coded, bucket
+  policy matches exactly (3 statements as designed).
+- CloudTrail: IsLogging=true, actively delivering log files — digest
+  files present for every AWS region, event logs for eu-west-1 and
+  us-east-1, most recent delivery within minutes of the check.
+- SNS topic and CloudWatch log group both confirmed to exist and match
+  the Terraform configuration.
+- Access logging correctly wired on both the data lake bucket and the
+  CloudTrail bucket, pointing at the shared logs bucket under distinct
+  prefixes (logs bucket itself had no objects yet at check time — normal,
+  since S3 server access log delivery has a multi-hour lag).
+
+COST ESTIMATE
+--------------
+At near-zero data volume (test data only, as of this deployment):
+  S3 storage + requests:          negligible (<$0.01/month)
+  CloudTrail management events:   free (first copy of management
+                                   events is always free)
+  CloudTrail S3 data events:      billed per 100,000 events — negligible
+                                   at this activity level
+  SNS notifications:              $0 (within free tier)
+  CloudWatch Logs:                negligible (near-zero ingestion so far)
+  No KMS CMK used (deliberate, avoids the flat $1/month charge)
+Total estimated cost: <$1/month at current (test) data volume. Will
+  scale with real S3 storage volume and CloudTrail S3-data-event volume
+  once actual raw/ traffic starts flowing daily.
+
+CLEANUP INSTRUCTIONS (to avoid charges)
+========================================
+Full teardown (removes everything this stack created):
+  cd terraform
+  terraform destroy
+
+Partial teardown — Part 15 of the lab doc (delete only the test file,
+keep the bucket, CloudTrail, and everything else):
+  terraform apply -var="upload_test_data=false"
+
+Keep (not owned by this stack, shared with other labs):
+  data-lake-825765383386        (Terraform state bucket)
+  datasync-terraform-locks      (Terraform lock table)
+  DataEngineerRole / GlueServiceRole / RedshiftIAMRole
+                                 (IAM roles, owned by Lab 1.1)
+========================================
