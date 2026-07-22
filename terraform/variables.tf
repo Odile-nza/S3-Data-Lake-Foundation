@@ -1,7 +1,7 @@
 variable "aws_region" {
-  description = "AWS region for the data lake (per lab prerequisites)."
+  description = "AWS region for the data lake. The lab doc says us-east-1, but this account's actual infrastructure (data-platform-vpc, Lab 1.2) lives in eu-west-1 — matching that instead."
   type        = string
-  default     = "us-east-1"
+  default     = "eu-west-1"
 }
 
 variable "environment" {

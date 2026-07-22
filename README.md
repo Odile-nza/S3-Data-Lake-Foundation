@@ -1,4 +1,4 @@
-# S3 Data Lake Foundation — Terraform + CI/CD
+# S3 Data Lake Foundation (Terraform + CI/CD)
 
 Terraform implementation of the lab described in [`S3 Data Lake Foundation.md`](./S3%20Data%20Lake%20Foundation.md), deployed via a GitHub Actions CI/CD pipeline.
 
@@ -16,13 +16,19 @@ Terraform implementation of the lab described in [`S3 Data Lake Foundation.md`](
 | Part 11 — Tags | `Environment`, `Owner`, `Purpose`, `CostCenter` applied via provider `default_tags` |
 | Part 12 — Test data | `test_customers.csv` uploaded to `raw/`, gated by `var.upload_test_data` |
 
-The IAM roles and VPC from Labs 1.1/1.2 are treated as pre-existing prerequisites — Terraform looks them up with `aws_iam_role` data sources rather than creating them.
+The IAM roles from Lab 1.1 (`iam-lab-terraform`) are treated as pre-existing prerequisites — Terraform looks them up with `aws_iam_role` data sources rather than creating them. Confirmed to actually exist in this account (checked its deployed state directly).
+
+## Deviations from the lab doc
+
+- **Region**: the doc says `us-east-1`; every other lab actually deployed in this account (`data-platform-vpc` from Lab 1.2, the DataSync lab) lives in `eu-west-1`, so this stack targets `eu-west-1` too.
+- **State backend**: rather than standing up a dedicated bucket/table, this reuses the shared `data-lake-825765383386` S3 bucket and `datasync-terraform-locks` DynamoDB table that the DataSync lab already created in this account, under the key `terraform/s3-data-lake-foundation.tfstate`.
+- **CI/CD auth**: uses static AWS credentials as GitHub secrets, matching every other lab's pipeline in this account, rather than an OIDC-federated role (an OIDC bootstrap was built and then dropped — see git history — since nothing else in this account's sandbox relies on OIDC and it adds setup steps this training account doesn't need).
 
 ## Layout
 
 ```
 terraform/
-  versions.tf, providers.tf     # Terraform/provider config, S3 backend
+  versions.tf, providers.tf     # Terraform/provider config, S3 backend (shared bucket, see above)
   variables.tf, locals.tf, data.tf
   s3_data_lake_bucket.tf        # Part 4-7
   s3_bucket_policy.tf            # Part 5
@@ -41,30 +47,21 @@ terraform/
 2. **plan** — `terraform fmt -check`, `init`, `validate`, `plan`. On pull requests the plan is posted as a PR comment; on pushes to `main` the plan is saved as an artifact.
 3. **apply** — runs only on push to `main`, gated by the `production` GitHub Environment (configure required reviewers there for a manual approval gate), downloads the saved plan and applies it exactly (`terraform apply tfplan`) so what was reviewed is what ships.
 
-Auth to AWS uses OIDC (`aws-actions/configure-aws-credentials`) — no long-lived access keys stored in GitHub.
-
 ### Required repository configuration
 
 **Secrets** (Settings → Secrets and variables → Actions → Secrets):
-- `AWS_ROLE_ARN` — IAM role GitHub Actions assumes via OIDC
-- `TF_STATE_BUCKET` — S3 bucket holding Terraform state
-- `TF_STATE_REGION` — region of that bucket
-- `TF_LOCK_TABLE` — DynamoDB table for state locking
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` — this account is a training sandbox handing out short-lived STS tokens rather than a normal IAM user's long-lived keys, so these expire and must be refreshed (re-copy fresh values into the secrets) before each CI run.
 
 **Variables** (same page, "Variables" tab, optional):
-- `AWS_REGION` — defaults to `us-east-1`
-- `TF_STATE_KEY` — defaults to `S3-Data-Lake-Foundation/terraform.tfstate`
+- `AWS_REGION` — defaults to `eu-west-1`
 
 **Environment**: create a `production` environment (Settings → Environments) with required reviewers to approve applies before they run.
-
-The AWS IAM role trust policy must allow the GitHub OIDC provider (`token.actions.githubusercontent.com`) to assume it, scoped to this repo.
 
 ## Local usage
 
 ```bash
 cd terraform
-cp backend.hcl.example backend.hcl   # fill in your state bucket details
-terraform init -backend-config=backend.hcl
+terraform init
 terraform plan
 terraform apply
 ```
