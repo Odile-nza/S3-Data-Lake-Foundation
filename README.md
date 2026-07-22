@@ -43,9 +43,8 @@ terraform/
 
 ## CI/CD pipeline (`.github/workflows/terraform.yml`)
 
-1. **security-scan** — Checkov static analysis of the Terraform on every PR/push.
-2. **plan** — `terraform fmt -check`, `init`, `validate`, `plan`. On pull requests the plan is posted as a PR comment; on pushes to `main` the plan is saved as an artifact.
-3. **apply** — runs only on push to `main`, gated by the `production` GitHub Environment (configure required reviewers there for a manual approval gate), downloads the saved plan and applies it exactly (`terraform apply tfplan`) so what was reviewed is what ships.
+1. **plan** — `terraform fmt -check`, `init`, `validate`, `plan`. On pull requests the plan is posted as a PR comment; on pushes to `main` the plan is saved as an artifact.
+2. **apply** — runs only on push to `main`, gated by the `production` GitHub Environment (configure required reviewers there for a manual approval gate), downloads the saved plan and applies it exactly (`terraform apply tfplan`) so what was reviewed is what ships.
 
 ### Required repository configuration
 

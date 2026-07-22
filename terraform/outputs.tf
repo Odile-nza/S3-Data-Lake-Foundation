@@ -28,6 +28,16 @@ output "cloudtrail_arn" {
   value       = aws_cloudtrail.data_lake_audit_trail.arn
 }
 
+output "cloudtrail_notifications_topic_arn" {
+  description = "ARN of the SNS topic notified when a new CloudTrail log file is delivered."
+  value       = aws_sns_topic.cloudtrail_notifications.arn
+}
+
+output "cloudtrail_cloudwatch_log_group" {
+  description = "CloudWatch Logs group receiving CloudTrail events in near real time."
+  value       = aws_cloudwatch_log_group.cloudtrail.name
+}
+
 output "folders" {
   description = "Top-level folder structure created in the data lake bucket."
   value       = local.folders

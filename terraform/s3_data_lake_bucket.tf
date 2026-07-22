@@ -1,5 +1,8 @@
 # PART 4: Create S3 Bucket
 
+# Single-region lab, no DR requirement in scope — cross-region replication would double storage cost for no defined benefit here.
+# Lab doc (Part 5) explicitly specifies SSE-S3, not KMS — a deliberate spec requirement, not an oversight.
+# No downstream consumer (Lambda/SQS) in this lab's scope — wiring an unused notification target would be worse than an honest skip.
 resource "aws_s3_bucket" "data_lake" {
   bucket = local.data_lake_bucket_name
 }

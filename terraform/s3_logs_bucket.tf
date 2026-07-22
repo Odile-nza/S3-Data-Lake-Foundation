@@ -1,5 +1,8 @@
 # PART 7: Access Logging target bucket
 
+# Single-region lab, no DR requirement in scope — cross-region replication would double storage cost for no defined benefit here.
+# Lab scope keeps SSE-S3 (no KMS CMK) to avoid the flat per-key monthly charge; SSE-S3 already gives encryption at rest.
+# No downstream consumer (Lambda/SQS) in this lab's scope — wiring an unused notification target would be worse than an honest skip.
 resource "aws_s3_bucket" "logs" {
   bucket = local.logs_bucket_name
 }
@@ -92,4 +95,30 @@ data "aws_iam_policy_document" "logs_bucket_policy" {
 resource "aws_s3_bucket_policy" "logs" {
   bucket = aws_s3_bucket.logs.id
   policy = data.aws_iam_policy_document.logs_bucket_policy.json
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+
+  rule {
+    id     = "logs-storage-optimization"
+    status = "Enabled"
+
+    filter {}
+
+    transition {
+      days          = var.logs_glacier_days
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = var.logs_expiration_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.abort_incomplete_multipart_upload_days
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.logs]
 }

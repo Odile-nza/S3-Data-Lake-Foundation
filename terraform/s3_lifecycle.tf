@@ -60,5 +60,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
     }
   }
 
+  # Cleans up stray multipart uploads left by interrupted transfers,
+  # bucket-wide (not scoped to any one prefix).
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.abort_incomplete_multipart_upload_days
+    }
+  }
+
   depends_on = [aws_s3_bucket_versioning.data_lake]
 }

@@ -65,6 +65,36 @@ variable "archive_expiration_days" {
   default     = 2555
 }
 
+variable "abort_incomplete_multipart_upload_days" {
+  description = "Days before an incomplete multipart upload is aborted and cleaned up, applied bucket-wide across the data lake, logs, and CloudTrail buckets."
+  type        = number
+  default     = 7
+}
+
+variable "cloudtrail_glacier_days" {
+  description = "Days before CloudTrail logs transition to Glacier. Audit logs are never expired, only moved to cheaper storage."
+  type        = number
+  default     = 90
+}
+
+variable "cloudtrail_cloudwatch_retention_days" {
+  description = "CloudWatch Logs retention for the CloudTrail log group."
+  type        = number
+  default     = 365
+}
+
+variable "logs_glacier_days" {
+  description = "Days before S3 access logs transition to Glacier."
+  type        = number
+  default     = 90
+}
+
+variable "logs_expiration_days" {
+  description = "Days before S3 access logs are deleted."
+  type        = number
+  default     = 365
+}
+
 # --- Test data -----------------------------------------------------------
 
 variable "upload_test_data" {
